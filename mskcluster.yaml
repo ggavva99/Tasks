@@ -1,0 +1,36 @@
+Parameters:
+  NetworkStackName:
+    Description: Name of the base stack with all infra resources
+    Type: String
+    Default: vpc
+  InstanceType:
+    Type: String
+    Default: kafka.t3.small
+Description: MSK Cluster with all properties
+Resources:
+  TestCluster:
+    Type: 'AWS::MSK::Cluster'
+    Properties:
+      ClusterName: ClusterWithAllProperties
+      KafkaVersion: 2.2.1
+      NumberOfBrokerNodes: 3
+      EnhancedMonitoring: PER_BROKER
+      Tags:
+        Environment: Test
+        Owner: QATeam
+      BrokerNodeGroupInfo:
+        BrokerAZDistribution: DEFAULT
+        InstanceType: !Ref InstanceType
+        SecurityGroups:
+          - 'Fn::ImportValue':
+              'Fn::Sub': '${NetworkStackName}-SecurityGroupID'
+        StorageInfo:
+          EBSStorageInfo:
+            VolumeSize: 50
+        ClientSubnets:
+          - 'Fn::ImportValue':
+              'Fn::Sub': '${NetworkStackName}-PublicSubnet1ID'
+          - 'Fn::ImportValue':
+              'Fn::Sub': '${NetworkStackName}-PublicSubnet2ID'
+          - 'Fn::ImportValue':
+              'Fn::Sub': '${NetworkStackName}-PublicSubnet3ID'
