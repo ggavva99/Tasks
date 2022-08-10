@@ -19,8 +19,11 @@ Where to get:
 Usage:
 
   1. we need to clone the mskrepo by using below command
+  
       git clone https://github.com/cjpcloud/mskrepo.git
+      
   2. Once clone the repo then we need the run the script.sh file
+  
       sh script.sh
 
 Note:    
