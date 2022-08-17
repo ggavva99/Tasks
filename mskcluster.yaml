@@ -23,9 +23,9 @@ Resources:
                Iam:
                    Enabled: True
                       
-             #Tags:
-             #Environment: Test
-             #Owner: QATeam
+      Tags:
+           Environment: Test
+           Owner: QATeam
       BrokerNodeGroupInfo:
         BrokerAZDistribution: DEFAULT
         InstanceType: !Ref InstanceType
