@@ -11,13 +11,21 @@ Resources:
   TestCluster:
     Type: 'AWS::MSK::Cluster'
     Properties:
-      ClusterName: ClusterWithAllProperties
-      KafkaVersion: 2.2.1
+      ClusterName: Properties
+      KafkaVersion: 2.8.0
       NumberOfBrokerNodes: 3
       EnhancedMonitoring: PER_BROKER
-      Tags:
-        Environment: Test
-        Owner: QATeam
+      ConnectivityInfo:
+        PublicAccess:
+           Type: "SERVICE_PROVIDED_EIPS"
+      ClientAuthentication:
+             Sasl:
+               Iam:
+                   Enabled: True
+                      
+             #Tags:
+             #Environment: Test
+             #Owner: QATeam
       BrokerNodeGroupInfo:
         BrokerAZDistribution: DEFAULT
         InstanceType: !Ref InstanceType
@@ -34,3 +42,4 @@ Resources:
               'Fn::Sub': '${NetworkStackName}-PublicSubnet2ID'
           - 'Fn::ImportValue':
               'Fn::Sub': '${NetworkStackName}-PublicSubnet3ID'
+
