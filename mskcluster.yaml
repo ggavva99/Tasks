@@ -15,14 +15,10 @@ Resources:
       KafkaVersion: 2.8.0
       NumberOfBrokerNodes: 3
       EnhancedMonitoring: PER_BROKER
-      ConnectivityInfo:
-        PublicAccess:
-           Type: "SERVICE_PROVIDED_EIPS"
       ClientAuthentication:
              Sasl:
                Iam:
                    Enabled: True
-                      
       Tags:
            Environment: Test
            Owner: QATeam
@@ -42,4 +38,3 @@ Resources:
               'Fn::Sub': '${NetworkStackName}-PublicSubnet2ID'
           - 'Fn::ImportValue':
               'Fn::Sub': '${NetworkStackName}-PublicSubnet3ID'
-
