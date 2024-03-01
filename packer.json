@@ -1,0 +1,37 @@
+{
+"variables": {
+"instance_size": "t2.micro",
+"ami_name": "ami-packer",
+"base_ami": "ami-0c7217cdde317cfec",
+"ssh_username": "ubuntu",
+"vpc_id": "vpc-01a31294bd0f5e60b",
+"subnet_id": "subnet-016892f06f6b1aaa5"
+},
+"builders": [
+{
+"type": "amazon-ebs",
+"region": "us-east-1",
+"source_ami": "{{user `base_ami`}}",
+"instance_type": "{{user `instance_size`}}",
+"ssh_username": "{{user `ssh_username`}}",
+"ssh_timeout": "20m",
+"ami_name": "{{user `ami_name`}}",
+"ssh_pty" : "true",
+"vpc_id": "{{user `vpc_id`}}",
+"subnet_id": "{{user `subnet_id`}}",
+"tags": {
+"Name": "App Name",
+"BuiltBy": "Packer"
+}
+}
+],
+"description": "AWS image",
+"provisioners": [
+{
+"type": "shell",
+"inline": [
+"sudo apt-get update -y"
+]
+}
+]
+}
