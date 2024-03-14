@@ -1,0 +1,47 @@
+cat main.yml
+---
+- hosts: localhost
+  tasks:
+    - name: "Check if NGINX is installed"
+      package_facts:
+        manager: "auto"
+    - name: "tree test result"
+      debug:
+        msg: "tree found"
+      when: "'tree' in ansible_facts.packages"
+
+    - name: "tree test result"
+      debug:
+        msg: "tree NOT found"
+      when: "'tree' not in ansible_facts.packages"
+    - name: Performing Tasks for CentOS
+      when: ansible_facts['distribution'] == 'CentOS'
+      include_tasks: centos.yml
+    - name: Performing Tasks for Ubuntu
+      when: ansible_facts['distribution'] == 'Ubuntu'
+      include_tasks: ubuntu.yml
+
+--------------------------
+  - name: Update yum package
+      yum:
+       name: "*"
+       state: latest
+       update_cache: yes
+   - name: Install Packages
+     yum:
+       name: tree
+       state: latest
+       update_cache: yes
+       -----------------------------------
+     - name: Update apt package
+       apt:
+        name: "*"
+        state: latest
+        update_cache: yes
+     - name: Install Packages
+       apt:
+        name: tree
+        state: latest
+        update_cache: yes
+        ---------------------------------------------
+
