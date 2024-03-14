@@ -1,0 +1,29 @@
+---
+- hosts: localhost
+  tasks:
+  - name: Create file
+    file:
+      path: output.csv
+      state: touch
+  - name: Get hostname
+    shell: hostname
+    register: hostname
+  - name: Get the  groupnames
+    shell: |
+      cat /etc/group |grep test | awk -F: '{print $1}' | tr , '\n'
+    register: group
+  - name: Get the usernames
+    shell: |
+      cat /etc/group |grep test | awk -F: '{print $4}' | tr , '\n'|xargs
+    register: user
+  - name: Save ddata_dict headers to a new CSV file
+    lineinfile:
+        path: output.csv
+        line: "hostname, group, user"
+        create: yes
+  - name: hostname.stdout, and date.stdout to output.csv
+    lineinfile:
+      path: output.csv
+      line: "{{ hostname.stdout }}, {{ group.stdout }}, {{ user.stdout }}"
+      create: yes
+      state: present
