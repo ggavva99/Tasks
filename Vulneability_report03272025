@@ -18,13 +18,14 @@
         th { background-color: #f4f4f4; }
         .hidden { display: none; }
         h2 { text-align: center; }
-        .chart-container { width: 300px; height: 300px; }
+        .chart-container { width: 400px; height: 400px; }
     </style>
 </head>
 <body>
     <div class="container">
         <h2>Vulnerability Report</h2>
         <input type="file" id="csvFile" accept=".csv">
+
         <div class="row">
             <div class="column">
                 <div id="assetOwners" class="filter-list"></div>
@@ -61,4 +62,8 @@
             if (!file) return;
 
             Papa.parse(file, {
-                header:
+                header: true,
+                skipEmptyLines: true,
+                complete: function(results) {
+                    csvData = results.data.map(row => {
+                        let newRow =
