@@ -1,0 +1,220 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Vulnerability Report</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.3.2/papaparse.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <style>
+        body { font-family: Arial, sans-serif; }
+        .container { max-width: 1200px; margin: auto; display: flex; flex-direction: column; }
+        .row { display: flex; gap: 20px; margin-top: 20px; }
+        .column { flex: 1; }
+        .filter-list { margin-top: 20px; }
+        .filter-item { cursor: pointer; color: blue; text-decoration: underline; margin: 5px 0; }
+        table { width: 100%; border-collapse: collapse; margin-top: 10px; }
+        th, td { border: 1px solid black; padding: 8px; text-align: left; }
+        th { background-color: #f4f4f4; }
+        .hidden { display: none; }
+        h2 { text-align: center; }
+        .chart-container { width: 200px; height: 200px; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h2>Vulnerability Report</h2>
+        <input type="file" id="csvFile" accept=".csv">
+
+        <div class="row">
+            <div class="column">
+                <div id="assetOwners" class="filter-list"></div>
+            </div>
+            <div class="column">
+                <h3>Asset Owner Risk Distribution</h3>
+                <div class="chart-container">
+                    <canvas id="riskPieChart"></canvas>
+                </div>
+            </div>
+        </div>
+
+        <div class="row">
+            <div class="column">
+                <h3 id="summaryTitle">Vulnerability Summary</h3>
+                <table id="vulnerabilityTable">
+                    <tr>
+                        <th>Vulnerability</th>
+                        <th>Risk Score</th>
+                        <th>Count</th>
+                    </tr>
+                </table>
+                <button id="toggleMore" class="hidden">Show More</button>
+            </div>
+        </div>
+
+        <h3 id="selectedVulnerability"></h3>
+        <table id="results" class="result-table"></table>
+    </div>
+
+    <script>
+        let csvData = [];
+        let riskChart;
+
+        document.getElementById('csvFile').addEventListener('change', function(event) {
+            const file = event.target.files[0];
+            if (!file) return;
+
+            Papa.parse(file, {
+                header: true,
+                skipEmptyLines: true,
+                complete: function(results) {
+                    csvData = results.data.map(row => {
+                        let newRow = {};
+                        Object.keys(row).forEach(key => {
+                            let normalizedKey = key.trim();
+                            newRow[normalizedKey] = row[key].trim();
+                        });
+                        return newRow;
+                    });
+                    renderAssetOwners();
+                    renderRiskChart();
+                }
+            });
+        });
+
+        function renderAssetOwners() {
+            const owners = [...new Set(csvData.map(row => row['Asset Owner']).filter(Boolean))];
+            const container = document.getElementById('assetOwners');
+            container.innerHTML = '<h3>Asset Owners</h3>';
+            owners.forEach(owner => {
+                const div = document.createElement('div');
+                div.textContent = owner;
+                div.className = 'filter-item';
+                div.onclick = () => renderVulnerabilityTable(owner);
+                container.appendChild(div);
+            });
+        }
+
+        function renderRiskChart() {
+            const ownerRiskScores = {};
+            csvData.forEach(row => {
+                const owner = row['Asset Owner'];
+                const riskScore = parseFloat(row['Vulnerability Risk Score']) || 0;
+                if (owner) {
+                    ownerRiskScores[owner] = (ownerRiskScores[owner] || 0) + riskScore;
+                }
+            });
+
+            const owners = Object.keys(ownerRiskScores);
+            const scores = Object.values(ownerRiskScores);
+            const totalRisk = scores.reduce((sum, val) => sum + val, 0);
+            const percentages = scores.map(score => ((score / totalRisk) * 100).toFixed(2));
+
+            const ctx = document.getElementById('riskPieChart').getContext('2d');
+            if (riskChart) riskChart.destroy(); // Destroy previous chart instance if it exists
+            riskChart = new Chart(ctx, {
+                type: 'pie',
+                data: {
+                    labels: owners,
+                    datasets: [{
+                        data: percentages,
+                        backgroundColor: ['#ff6384', '#36a2eb', '#ffce56', '#4bc0c0', '#9966ff', '#ff9f40'],
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    plugins: {
+                        legend: {
+                            position: 'bottom',
+                        }
+                    }
+                }
+            });
+        }
+
+        function renderVulnerabilityTable(owner) {
+            document.getElementById('summaryTitle').textContent = `Vulnerability Summary: ${owner}`;
+
+            const vulnerabilities = [...new Set(csvData.filter(row => row['Asset Owner'] === owner).map(row => row['Vulnerability Title']).filter(Boolean))];
+            const table = document.getElementById('vulnerabilityTable');
+            table.innerHTML = `
+                <tr>
+                    <th>Vulnerability</th>
+                    <th>Risk Score</th>
+                    <th>Count</th>
+                </tr>`;
+
+            let totalRiskScore = 0;
+            const vulnerabilityData = {};
+
+            vulnerabilities.forEach(title => {
+                const rows = csvData.filter(row => row['Asset Owner'] === owner && row['Vulnerability Title'] === title);
+                let totalRisk = 0;
+                rows.forEach(row => {
+                    let riskScore = parseFloat(row['Vulnerability Risk Score']) || 0;
+                    totalRisk += riskScore;
+                });
+                totalRiskScore += totalRisk;
+                vulnerabilityData[title] = { riskScore: totalRisk, count: rows.length };
+            });
+
+            const sortedData = Object.entries(vulnerabilityData).sort((a, b) => b[1].riskScore - a[1].riskScore);
+            const toggleButton = document.getElementById('toggleMore');
+
+            sortedData.forEach(([title, data], index) => {
+                const tr = document.createElement('tr');
+                tr.className = index >= 5 ? 'hidden extra-rows' : '';
+                tr.innerHTML = `<td class="filter-item" onclick="renderResults('${owner}', '${title}')">${title}</td>
+                                <td>${data.riskScore.toFixed(2)}</td>
+                                <td>${data.count}</td>`;
+                table.appendChild(tr);
+            });
+
+            const totalRow = document.createElement('tr');
+            totalRow.innerHTML = `<td><strong>Total Risk Score</strong></td>
+                                  <td><strong>${totalRiskScore.toFixed(2)}</strong></td>
+                                  <td></td>`;
+            table.appendChild(totalRow);
+
+            toggleButton.classList.toggle('hidden', sortedData.length <= 5);
+            toggleButton.textContent = 'Show More';
+            toggleButton.onclick = function () {
+                document.querySelectorAll('.extra-rows').forEach(row => row.classList.toggle('hidden'));
+                toggleButton.textContent = toggleButton.textContent === 'Show More' ? 'Show Less' : 'Show More';
+            };
+        }
+
+        function renderResults(owner, title) {
+            const filteredData = csvData.filter(row => row['Asset Owner'] === owner && row['Vulnerability Title'] === title);
+            document.getElementById('selectedVulnerability').textContent = `Vulnerability: ${title}`;
+            const table = document.getElementById('results');
+            table.innerHTML = `
+                <tr>
+                    <th>Hostname</th>
+                    <th>IP Address</th>
+                    <th>OS Name</th>
+                    <th>OS Version</th>
+                    <th>Severity Level</th>
+                    <th>Vulnerability Age</th>
+                    <th>Custom Tag</th>
+                </tr>`;
+
+            filteredData.forEach(row => {
+                const tr = document.createElement('tr');
+                tr.innerHTML = `
+                    <td>${row['Asset Names'] || 'N/A'}</td>
+                    <td>${row['Asset IP Address'] || 'N/A'}</td>
+                    <td>${row['Asset OS Name'] || 'N/A'}</td>
+                    <td>${row['Asset OS Version'] || 'N/A'}</td>
+                    <td>${row['Vulnerability Severity Level'] || 'N/A'}</td>
+                    <td>${row['Vulnerability Age'] || 'N/A'}</td>
+                    <td>${row['Custom Tag'] || 'N/A'}</td>`;
+                table.appendChild(tr);
+            });
+            setTimeout(() => {
+            window.scrollTo({ top: document.body.scrollHeight, behavior: 'smooth' });
+        }, 200);
+        }
+    </script>
+</body>
+</html>
