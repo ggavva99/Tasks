@@ -1,0 +1,35 @@
+const express = require('express');
+const fs = require('fs');
+const path = require('path');
+const cors = require('cors');
+
+const app = express();
+const PORT = 3000;
+const storagePath = 'C:/Users/ADMIN/Desktop/ganesh/storage/assignments.json';
+
+app.use(cors());
+app.use(express.json());
+
+// Load assignments
+app.get('/assignments', (req, res) => {
+    fs.readFile(storagePath, 'utf8', (err, data) => {
+        if (err) return res.json({});
+        try {
+            res.json(JSON.parse(data));
+        } catch {
+            res.json({});
+        }
+    });
+});
+
+// Save assignments
+app.post('/assignments', (req, res) => {
+    fs.writeFile(storagePath, JSON.stringify(req.body, null, 2), err => {
+        if (err) return res.status(500).send('Failed to save');
+        res.send('Saved successfully');
+    });
+});
+
+app.listen(PORT, () => {
+    console.log(`Server running at http://localhost:${PORT}`);
+});
