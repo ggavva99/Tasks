@@ -1,0 +1,203 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>CSV Comparison with One JSON</title>
+  <script src="https://cdn.jsdelivr.net/npm/papaparse@5.4.1/papaparse.min.js"></script>
+  <style>
+    body { font-family: Arial, sans-serif; padding: 20px; }
+    h2 { text-align: center; }
+    .upload-section { text-align: center; margin-bottom: 20px; }
+
+    .grid-wrapper {
+      display: grid;
+      grid-template-columns: repeat(6, 1fr);
+      gap: 20px;
+      width: 100%;
+    }
+    .grid-wrapper > .table-container {
+      grid-column: span 3;
+    }
+    .table-title {
+      font-weight: bold;
+      text-align: center;
+      margin-top: 10px;
+    }
+    table {
+      width: 100%;
+      table-layout: fixed;
+      border-collapse: collapse;
+      margin-top: 10px;
+    }
+    th, td {
+      border: 1px solid #000;
+      padding: 5px;
+      text-align: left;
+      font-size: 14px;
+      word-wrap: break-word;
+    }
+    th.col-title, td.col-title { width: 30%; }
+    th.col-severity, td.col-severity { width: 15%; }
+    th.col-count, td.col-count { width: 10%; }
+    th.col-risk, td.col-risk { width: 15%; }
+    th.col-assignee, td.col-assignee { width: 15%; }
+    th.col-diff, td.col-diff { width: 15%; }
+  </style>
+</head>
+<body>
+
+  <h2>CSV Vulnerability Comparison with One JSON</h2>
+
+  <div class="upload-section">
+    <label>Last Month CSV:</label><br>
+    <input type="file" id="lastMonthFile" accept=".csv"><br><br>
+    <label>This Month CSV:</label><br>
+    <input type="file" id="thisMonthFile" accept=".csv"><br><br>
+    <label>Assignee Mapping JSON (1 file for both months):</label><br>
+    <input type="file" id="assigneeJson" accept=".json"><br><br>
+    <button onclick="handleFiles()">Compare</button>
+  </div>
+
+  <div class="grid-wrapper">
+    <div class="table-container">
+      <div class="table-title">Last Month</div>
+      <div id="lastMonthTable"></div>
+    </div>
+    <div class="table-container">
+      <div class="table-title">This Month</div>
+      <div id="thisMonthTable"></div>
+    </div>
+  </div>
+
+  <script>
+    let lastMonthData = [];
+    let assigneeMap = {};
+
+    function handleFiles() {
+      const lastCSV = document.getElementById("lastMonthFile").files[0];
+      const thisCSV = document.getElementById("thisMonthFile").files[0];
+      const jsonFile = document.getElementById("assigneeJson").files[0];
+
+      if (!(lastCSV && thisCSV && jsonFile)) {
+        alert("Please upload 2 CSVs and 1 JSON file.");
+        return;
+      }
+
+      readJSON(jsonFile).then(jsonData => {
+        assigneeMap = jsonData;
+
+        Papa.parse(lastCSV, {
+          header: true,
+          skipEmptyLines: true,
+          complete: function(resultsLast) {
+            lastMonthData = resultsLast.data;
+
+            Papa.parse(thisCSV, {
+              header: true,
+              skipEmptyLines: true,
+              complete: function(resultsThis) {
+                const sortedLastMonth = sortByAssigneeFirst(lastMonthData);
+                const sortedThisMonth = sortByAssigneeFirst(resultsThis.data);
+                renderTable("lastMonthTable", sortedLastMonth, "Last Month");
+                renderTable("thisMonthTable", sortedThisMonth, "This Month");
+              }
+            });
+          }
+        });
+      });
+    }
+
+    function sortByAssigneeFirst(data) {
+      return data.slice().sort((a, b) => {
+        const aAssigned = assigneeMap[a["Vulnerability Title"]] ? 0 : 1;
+        const bAssigned = assigneeMap[b["Vulnerability Title"]] ? 0 : 1;
+        return aAssigned - bAssigned;
+      });
+    }
+
+    function readJSON(file) {
+      return new Promise(resolve => {
+        const reader = new FileReader();
+        reader.onload = e => resolve(JSON.parse(e.target.result));
+        reader.readAsText(file);
+      });
+    }
+
+    function renderTable(containerId, data, label = "") {
+      const isThisMonth = label === "This Month";
+      const columns = [
+        { label: "Vulnerability Title", key: "Vulnerability Title", class: "col-title" },
+        { label: "Vulnerability Severity Level", key: "Vulnerability Severity Level", class: "col-severity" },
+        { label: "Count", key: "Count", class: "col-count" },
+        { label: "Vulnerability Risk Score", key: "Vulnerability Risk Score", class: "col-risk" },
+        { label: "Assignee", key: "Assignee", class: "col-assignee" },
+        { label: "Count Challenges", key: "Count Challenges", class: "col-diff" },
+      ];
+
+      const container = document.getElementById(containerId);
+      container.innerHTML = "";
+
+      const table = document.createElement("table");
+      const thead = document.createElement("thead");
+      const tbody = document.createElement("tbody");
+
+      const headRow = document.createElement("tr");
+      columns.forEach(col => {
+        const th = document.createElement("th");
+        th.textContent = col.label;
+        th.className = col.class;
+        headRow.appendChild(th);
+      });
+      thead.appendChild(headRow);
+
+      const seen = new Set();
+
+      data.forEach(row => {
+        const title = row["Vulnerability Title"];
+        if (!title || seen.has(title)) return;
+        seen.add(title);
+
+        const occurrences = data.filter(r => r["Vulnerability Title"] === title).length;
+
+        let diffDisplay = "";
+        if (isThisMonth) {
+          const lastCount = lastMonthData.filter(r => r["Vulnerability Title"] === title).length;
+          if (lastCount === occurrences) {
+            diffDisplay = "match";
+          } else {
+            const diff = occurrences - lastCount;
+            diffDisplay = diff > 0 ? `+${diff}` : `${diff}`;
+          }
+        }
+
+        const tr = document.createElement("tr");
+        columns.forEach(col => {
+          const td = document.createElement("td");
+          td.className = col.class;
+
+          if (!isThisMonth && col.key === "Count Challenges") {
+            td.textContent = ""; // Empty for alignment
+          } else if (col.key === "Count") {
+            td.textContent = occurrences;
+          } else if (col.key === "Assignee") {
+            td.textContent = assigneeMap[title] || "";
+          } else if (col.key === "Count Challenges") {
+            td.textContent = diffDisplay;
+            td.style.fontWeight = "bold";
+            td.style.color = diffDisplay.includes("+") ? "green" : (diffDisplay.includes("-") ? "red" : "gray");
+          } else {
+            td.textContent = row[col.key] || "";
+          }
+
+          tr.appendChild(td);
+        });
+        tbody.appendChild(tr);
+      });
+
+      table.appendChild(thead);
+      table.appendChild(tbody);
+      container.appendChild(table);
+    }
+  </script>
+</body>
+</html>
