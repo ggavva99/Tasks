@@ -1,0 +1,189 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>CSV Vulnerability Side-by-Side Comparison</title>
+  <script src="https://cdn.jsdelivr.net/npm/papaparse@5.4.1/papaparse.min.js"></script>
+  <style>
+    body { font-family: Arial, sans-serif; padding: 20px; }
+    h2 { text-align: center; }
+    .upload-section { text-align: center; margin-bottom: 20px; }
+
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      margin-top: 20px;
+    }
+    th, td {
+      border: 1px solid #000;
+      padding: 6px;
+      font-size: 14px;
+      text-align: left;
+    }
+    th { background-color: #f0f0f0; }
+    .center { text-align: center; }
+
+    .diff-cell {
+      font-weight: bold;
+      text-align: center;
+    }
+    .diff-plus {
+      color: white;
+      background-color: red;
+    }
+    .diff-minus {
+      color: white;
+      background-color: green;
+    }
+    .match-cell {
+      color: gray;
+      background-color: #f9f9f9;
+    }
+  </style>
+</head>
+<body>
+
+  <h2>CSV Vulnerability Comparison (Side-by-Side with Count Challenges)</h2>
+
+  <div class="upload-section">
+    <label>Last Month CSV:</label><br>
+    <input type="file" id="lastMonthFile" accept=".csv"><br><br>
+    <label>This Month CSV:</label><br>
+    <input type="file" id="thisMonthFile" accept=".csv"><br><br>
+    <label>Assignee Mapping JSON:</label><br>
+    <input type="file" id="assigneeJson" accept=".json"><br><br>
+    <button onclick="handleFiles()">Compare</button>
+  </div>
+
+  <div id="comparisonResult"></div>
+
+  <script>
+    let assigneeMap = {};
+
+    function handleFiles() {
+      const lastCSV = document.getElementById("lastMonthFile").files[0];
+      const thisCSV = document.getElementById("thisMonthFile").files[0];
+      const jsonFile = document.getElementById("assigneeJson").files[0];
+
+      if (!(lastCSV && thisCSV && jsonFile)) {
+        alert("Please upload 2 CSVs and 1 JSON file.");
+        return;
+      }
+
+      readJSON(jsonFile).then(jsonData => {
+        assigneeMap = jsonData;
+
+        Papa.parse(lastCSV, {
+          header: true,
+          skipEmptyLines: true,
+          complete: function(resultsLast) {
+            const lastData = aggregateByTitle(resultsLast.data);
+
+            Papa.parse(thisCSV, {
+              header: true,
+              skipEmptyLines: true,
+              complete: function(resultsThis) {
+                const thisData = aggregateByTitle(resultsThis.data);
+                renderComparison(lastData, thisData);
+              }
+            });
+          }
+        });
+      });
+    }
+
+    function aggregateByTitle(data) {
+      const map = {};
+      data.forEach(row => {
+        const title = row["Vulnerability Title"];
+        if (!title) return;
+        if (!map[title]) {
+          map[title] = {
+            count: 0,
+            severity: row["Vulnerability Severity Level"] || '',
+            risk: parseFloat(row["Vulnerability Risk Score"]) || 0,
+          };
+        }
+        map[title].count += 1;
+        map[title].risk += parseFloat(row["Vulnerability Risk Score"]) || 0;
+      });
+      return map;
+    }
+
+    function readJSON(file) {
+      return new Promise(resolve => {
+        const reader = new FileReader();
+        reader.onload = e => resolve(JSON.parse(e.target.result));
+        reader.readAsText(file);
+      });
+    }
+
+    function renderComparison(lastMonth, thisMonth) {
+      const container = document.getElementById("comparisonResult");
+      container.innerHTML = "";
+
+      const table = document.createElement("table");
+      const thead = document.createElement("thead");
+      const tbody = document.createElement("tbody");
+
+      thead.innerHTML = `
+        <tr>
+          <th colspan="5" class="center">Last Month</th>
+          <th colspan="6" class="center">This Month</th>
+        </tr>
+        <tr>
+          <th>Title</th><th>Severity</th><th>Risk</th><th>Count</th><th>Assignee</th>
+          <th>Title</th><th>Severity</th><th>Risk</th><th>Count</th><th>Assignee</th><th>Count Challenges</th>
+        </tr>`;
+      table.appendChild(thead);
+
+      const allTitles = new Set([...Object.keys(lastMonth), ...Object.keys(thisMonth)]);
+      const rows = [];
+
+      allTitles.forEach(title => {
+        const last = lastMonth[title];
+        const thisOne = thisMonth[title];
+        const assignee = assigneeMap[title] || "";
+
+        const row = document.createElement("tr");
+
+        // Left side
+        row.innerHTML += last
+          ? `<td>${title}</td><td>${last.severity}</td><td>${last.risk.toFixed(1)}</td><td>${last.count}</td><td>${assignee}</td>`
+          : `<td colspan="5" class="center">—</td>`;
+
+        // Right side
+        row.innerHTML += thisOne
+          ? `<td>${title}</td><td>${thisOne.severity}</td><td>${thisOne.risk.toFixed(1)}</td><td>${thisOne.count}</td><td>${assignee}</td>`
+          : `<td colspan="5" class="center">—</td>`;
+
+        // Count challenge cell
+        const countTd = document.createElement("td");
+        countTd.classList.add("diff-cell");
+
+        if (last && thisOne) {
+          countTd.textContent = "match";
+          countTd.classList.add("match-cell");
+        } else if (!last && thisOne) {
+          countTd.textContent = "+1";
+          countTd.classList.add("diff-plus");
+        } else if (last && !thisOne) {
+          countTd.textContent = "-1";
+          countTd.classList.add("diff-minus");
+        }
+
+        row.appendChild(countTd);
+
+        rows.push({ row, assigned: !!assignee });
+      });
+
+      // Assigned first
+      rows.sort((a, b) => b.assigned - a.assigned);
+      rows.forEach(obj => tbody.appendChild(obj.row));
+
+      table.appendChild(tbody);
+      container.appendChild(table);
+    }
+  </script>
+</body>
+</html>
