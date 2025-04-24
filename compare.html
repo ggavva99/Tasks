@@ -143,7 +143,7 @@
       allTitles.forEach(title => {
         const last = lastMonth[title];
         const thisOne = thisMonth[title];
-        const assignee = assigneeMap[title] || "";
+        const assignee = assigneeMap[title]?.user || assigneeMap[title] || "";
 
         const row = document.createElement("tr");
 
@@ -162,13 +162,22 @@
         countTd.classList.add("diff-cell");
 
         if (last && thisOne) {
-          countTd.textContent = "match";
-          countTd.classList.add("match-cell");
+          const delta = thisOne.count - last.count;
+          if (delta > 0) {
+            countTd.textContent = `+${delta}`;
+            countTd.classList.add("diff-plus");
+          } else if (delta < 0) {
+            countTd.textContent = `${delta}`;
+            countTd.classList.add("diff-minus");
+          } else {
+            countTd.textContent = "match";
+            countTd.classList.add("match-cell");
+          }
         } else if (!last && thisOne) {
-          countTd.textContent = "+1";
+          countTd.textContent = `+${thisOne.count}`;
           countTd.classList.add("diff-plus");
         } else if (last && !thisOne) {
-          countTd.textContent = "-1";
+          countTd.textContent = `-${last.count}`;
           countTd.classList.add("diff-minus");
         }
 
@@ -177,7 +186,6 @@
         rows.push({ row, assigned: !!assignee });
       });
 
-      // Assigned first
       rows.sort((a, b) => b.assigned - a.assigned);
       rows.forEach(obj => tbody.appendChild(obj.row));
 
