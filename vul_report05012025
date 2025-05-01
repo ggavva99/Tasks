@@ -1,0 +1,1167 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Vulnerability Report</title>
+
+
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.3.2/papaparse.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <style>
+        body { font-family: Arial, sans-serif; }
+        .container { max-width: 1200px; margin: auto; display: flex; flex-direction: column; }
+        .row { display: flex; gap: 20px; margin-top: 20px; }
+        .column { flex: 1; }
+        .filter-list { margin-top: 20px; }
+        .filter-item { cursor: pointer; color: blue; text-decoration: underline; margin: 5px 0; }
+        table { width: 100%; border-collapse: collapse; margin-top: 10px; }
+        th, td { border: 1px solid black; padding: 8px; text-align: left; }
+        th { background-color: #f4f4f4; }
+        .hidden { display: none; }
+        h2 { text-align: center; }
+        .chart-container { width: 200px; height: 200px; }
+
+        .draggable {
+        cursor: move;
+        }
+        .droppable {
+        padding: 10px;
+        border: 2px dashed #ccc;
+        margin: 5px 0;
+        border-radius: 8px;
+        text-align: center;
+        background-color: #fafafa;
+        }
+        .droppable.dragover {
+        background-color: #cce5ff;
+        }
+        .top-bar {
+           display: flex;
+           justify-content: flex-end;
+           align-items: center;
+           gap: 10px;
+           padding: 10px 20px;
+           background-color: #f7f7f7;
+           border-bottom: 1px solid #ccc;
+           position: sticky;
+           top: 0;
+           z-index: 100;
+        }
+
+        .top-bar label {
+            font-size: 14px;
+        }
+
+        .top-bar input[type="file"] {
+            font-size: 12px;
+        }
+
+        .top-bar button {
+           font-size: 12px;
+           padding: 4px 10px;
+           background-color: #4CAF50;
+           color: white;
+           border: none;
+           border-radius: 4px;
+           cursor: pointer;
+        }
+
+        .top-bar button:hover {
+             background-color: #45a049;
+        }
+        #assignListContainer {
+          position: sticky;
+          top: 60px;
+          background: white;
+          z-index: 99;
+        }
+
+
+
+    </style>
+</head>
+<body>
+
+
+
+    <div class="container">
+        <h2>Vulnerability Report</h2>
+        <div class="row" style="align-items: center; gap: 30px;">
+            <div>
+                <h5>Load Linux_Include text file:</h5>
+                <input type="file" id="linuxKeywordsFile" accept=".txt">
+            </div>
+            <div>
+                <h5>Load Middleware_Include text file:</h5>
+                <input type="file" id="middlewareKeywordsFile" accept=".txt">
+            </div>
+            <div>
+                <h5>Load Database_Include text file:</h5>
+                <input type="file" id="databaseKeywordsFile" accept=".txt">
+            </div>
+        </div>
+
+        <h5 for="assignmentUpload">Load CSV File :</h5>
+        <input type="file" id="csvFile" accept=".csv">
+        <h5 for="assignmentUpload">Load Assignment JSON:</h5>
+        <input type="file" id="assignmentUpload" accept=".json">
+        <p><b></b> <a href="compare.html">Click here to compare two CSV files</a></p>
+
+        <div class="top-bar">
+
+        <button onclick="downloadAssignments()">Save Assignments</button>
+
+
+
+        </div>
+
+        <div class="row">
+            <div class="column">
+                <div id="assetOwners" class="filter-list"></div>
+            </div>
+            <div class="column">
+
+                <h3>Asset Owner Risk Distribution</h3>
+                <div class="chart-container">
+                    <canvas id="riskPieChart"></canvas>
+                </div>
+            </div>
+            <div class="column" id="assignListContainer">
+
+                <h3>Assign List</h3>
+
+                <div id="assignList" class="filter-list">
+
+                    <div id="usersDroppable"></div>
+
+                </div>
+
+
+
+         <!--   <div id="assignList" class="filter-list"></div>  -->
+
+            </div>
+        </div>
+
+
+
+
+        <div class="row">
+            <div class="column">
+
+                <h3 id="summaryTitle" style="font-size: 20px; text-align: center;">Vulnerability Summary</h3>
+
+                <table id="vulnerabilityTable" style="width: 100%;">
+                    <tr>
+                        <th>Vulnerability</th>
+                        <th>Risk Score</th>
+                        <th>Severity Level</th>
+                        <th>Count</th>
+                        <th>Assign</th>
+                    </tr>
+                </table>
+                <button id="toggleMore" class="hidden">Show More</button>
+            </div>
+        </div>
+        <div id="assignedVulnSection">
+            <h3 id="selectedVulnerability"></h3>
+            <table id="results" class="result-table"></table>
+        </div>
+
+        <h3 id="selectedVulnerability"></h3>
+        <table id="results" class="result-table"></table>
+    </div>
+    <div id="filtered-results" style="margin-top: 20px;"></div>
+
+
+     <div id="filtered-results"></div>
+    <script>
+        let hasUnsavedChanges = false;
+        let linuxKeywords = [];
+        let middlewareKeywords = [];
+        let databaseKeywords = [];
+
+        document.getElementById('linuxKeywordsFile').addEventListener('change', function (e) {
+           const file = e.target.files[0];
+           if (!file) return;
+
+           const reader = new FileReader();
+           reader.onload = function (event) {
+              try {
+                  linuxKeywords = event.target.result
+                      .split('\n')
+                      .map(k => k.trim().toLowerCase())
+                      .filter(k => k.length > 0); // remove empty lines
+
+                  alert('Keyword patterns loaded successfully!');
+              } catch (err) {
+                  alert('Failed to load keywords');
+              }
+           };
+           reader.readAsText(file);
+        });
+        document.getElementById('middlewareKeywordsFile').addEventListener('change', function (e) {
+              const file = e.target.files[0];
+              if (!file) return;
+
+              const reader = new FileReader();
+              reader.onload = function (event) {
+                    try {
+                        middlewareKeywords = event.target.result
+                             .split('\n')
+                             .map(k => k.trim().toLowerCase())
+                             .filter(k => k.length > 0);
+                        alert('Middleware keywords loaded successfully!');
+                    } catch (err) {
+                       alert('Failed to load middleware keywords');
+                    }
+              };
+              reader.readAsText(file);
+        });
+
+        document.getElementById('databaseKeywordsFile').addEventListener('change', function (e) {
+               const file = e.target.files[0];
+               if (!file) return;
+
+               const reader = new FileReader();
+               reader.onload = function (event) {
+                      try {
+                          databaseKeywords = event.target.result
+                               .split('\n')
+                               .map(k => k.trim().toLowerCase())
+                               .filter(k => k.length > 0);
+                          alert('Database keywords loaded successfully!');
+                      } catch (err) {
+                          alert('Failed to load database keywords');
+                      }
+               };
+               reader.readAsText(file);
+        });
+
+               // const data = JSON.parse(event.target.result);
+              //  linuxKeywords = (data.linuxKeywords || []).map(k => k.trim().toLowerCase());
+              //  alert('Include patterns loaded successfully!');
+             // } catch (err) {
+             //   alert('Failed to load include patterns');
+            //  }
+          // };
+         //  reader.readAsText(file);
+        // });
+        // const USERS = ['ramu@gmail.com', 'mitansh@gmail.com', 'mahesh@gmail.com', 'ganesh@gmail.com', 'rudra@gmail.com'];
+        const USER_EMAILS = { 'ramu': 'ramu@gmail.com', 'mitansh': 'mitansh@gmail.com', 'mahesh': 'mahesh@gmail.com', 'ganesh': 'ganesh@gmail.com', 'rudra': 'rudra@gmail.com' };
+        //const USERS = Object.keys(USER_EMAILS);
+
+        let csvData = [];
+        let riskChart;
+        // let assignments = JSON.parse(localStorage.getItem('assignments')) || {};
+        let assignments = {};
+
+
+        document.getElementById('assignmentUpload').addEventListener('change', function (e) {
+             const file = e.target.files[0];
+             if (!file) return;
+
+             const reader = new FileReader();
+             reader.onload = function (event) {
+               try {
+                  assignments = JSON.parse(event.target.result);
+                  renderAssignList();
+                 alert("Assignments loaded successfully.");
+               } catch (err) {
+                 alert("Invalid JSON file.");
+               }
+             };
+             reader.readAsText(file);
+        });
+
+
+        document.getElementById('csvFile').addEventListener('change', function(event) {
+ //           const title = newRow['Vulnerability Title'].toLowerCase();
+  //          const isLinuxMatch = linuxKeywords.some(keyword => title.includes(keyword));
+//          const isMiddlewareMatch = middlewareKeywords.some(keyword => title.includes(keyword));
+ //           const isDatabaseMatch = databaseKeywords.some(keyword => title.includes(keyword));
+
+            const file = event.target.files[0];
+            if (!file) return;
+
+            Papa.parse(file, {
+                header: true,
+                skipEmptyLines: true,
+                complete: function(results) {
+                    csvData = results.data.map(row => {
+                        let newRow = {};
+                        Object.keys(row).forEach(key => {
+                            let normalizedKey = key.trim();
+                            newRow[normalizedKey] = row[key].trim();
+                        });
+
+                        if (newRow['Vulnerability Title']) {
+                           const title = newRow['Vulnerability Title'];
+                           const titleLower = title.toLowerCase();
+                           if (
+                              title.startsWith("Oracle Linux: CVE") ||
+                              title.startsWith("Red Hat: CVE")
+                           ) {
+                             newRow['Asset Owner'] = 'Patch';
+                           } else {
+                           // const title = newRow['Vulnerability Title'].toLowerCase();
+                               const isLinuxMatch = linuxKeywords.some(keyword => title.includes(keyword))
+                               const isMiddlewareMatch = middlewareKeywords.some(keyword => title.includes(keyword));
+                               const isDatabaseMatch = databaseKeywords.some(keyword => title.includes(keyword));
+
+                               if (isLinuxMatch) newRow['Asset Owner'] = 'Linux';
+                               else if (isMiddlewareMatch) newRow['Asset Owner'] = 'Middleware';
+                               else if (isDatabaseMatch) newRow['Asset Owner'] = 'Database';
+                           // if (isLinuxMatch) {
+                           //     newRow['Asset Owner'] = 'Linux';
+                          // }
+
+                           }
+                        }
+
+
+
+                        return newRow;
+                    });
+                    renderAssetOwners();
+                    renderRiskChart();
+                }
+            });
+        });
+
+        function compareAndOpen() {
+            const oldCSV = document.getElementById("oldCSV").files[0];
+            const newCSV = document.getElementById("newCSV").files[0];
+            if (!oldCSV || !newCSV) {
+               alert("Upload both files.");
+               return;
+            }
+
+            Promise.all([oldCSV.text(), newCSV.text()]).then(([oldText, newText]) => {
+                sessionStorage.setItem("oldData", oldText);
+                sessionStorage.setItem("newData", newText);
+                window.open("compare.html", "_blank");
+            });
+        }
+        function downloadAssignments() {
+            const now = new Date();
+            const yyyy = now.getFullYear();
+            const mm = String(now.getMonth() + 1).padStart(2, '0');
+            const dd = String(now.getDate()).padStart(2, '0');
+            const hh = String(now.getHours()).padStart(2, '0');
+            const min = String(now.getMinutes()).padStart(2, '0');
+            const ss = String(now.getSeconds()).padStart(2, '0');
+
+            const filename = `assignments_${yyyy}-${mm}-${dd}_${hh}-${min}-${ss}.json`;
+
+            const blob = new Blob([JSON.stringify(assignments, null, 2)], { type: 'application/json' });
+            const a = document.createElement('a');
+            a.href = URL.createObjectURL(blob);
+            a.download = filename;
+            a.click();
+            URL.revokeObjectURL(a.href);
+            hasUnsavedChanges = false;
+
+        }
+
+        function renderAssetOwners() {
+            // const owners = [...new Set(csvData.map(row => row['Asset Owner']).filter(Boolean))];
+            let owners = [...new Set(csvData.map(row => row['Asset Owner']).filter(Boolean))];
+            if (!owners.includes('Patch')) {
+               owners.push('Patch'); // Manually add "Patch" to the list
+            }
+
+            const container = document.getElementById('assetOwners');
+            container.innerHTML = '<h3>Asset Owners</h3>';
+            owners.forEach(owner => {
+                const div = document.createElement('div');
+                div.textContent = owner;
+                div.className = 'filter-item';
+                div.onclick = () => {
+                    clearAssignListViews();
+                    renderVulnerabilityTable(owner);
+                    setTimeout(() => {
+                          const summarySection = document.getElementById('summaryTitle');
+                          if (summarySection) {
+                              summarySection.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                          }
+                    }, 200);
+                };
+
+                container.appendChild(div);
+            });
+        }
+
+        function renderRiskChart() {
+            const ownerRiskScores = {};
+            csvData.forEach(row => {
+                const owner = row['Asset Owner'];
+                const riskScore = parseFloat(row['Vulnerability Risk Score']) || 0;
+                if (owner) {
+                    ownerRiskScores[owner] = (ownerRiskScores[owner] || 0) + riskScore;
+                }
+            });
+
+            const owners = Object.keys(ownerRiskScores);
+            const scores = Object.values(ownerRiskScores);
+            const totalRisk = scores.reduce((sum, val) => sum + val, 0);
+            const percentages = scores.map(score => ((score / totalRisk) * 100).toFixed(2));
+
+            const ctx = document.getElementById('riskPieChart').getContext('2d');
+            if (riskChart) riskChart.destroy();
+            riskChart = new Chart(ctx, {
+                type: 'pie',
+                data: {
+                    labels: owners,
+                    datasets: [{
+                        data: percentages,
+                        backgroundColor: ['#ff6384', '#36a2eb', '#ffce56', '#4bc0c0', '#9966ff', '#ff9f40'],
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    plugins: {
+                        legend: {
+                            position: 'bottom',
+                        }
+                    }
+                }
+           });
+        }
+        let sortDescending = true;
+        function severityToNumber(severity) {
+              const levels = { "Critical": 4, "High": 3, "Medium": 2, "Low": 1, "Info": 0 };
+              return levels[severity] || -1;
+        }
+        let severitySortDescending = true;
+        let sortBy = 'risk';
+
+        function renderVulnerabilityTable(owner) {
+            // Hide assigned list Show More button
+            const toggleAssignedBtn = document.getElementById('toggleMoreAssigned');
+            if (toggleAssignedBtn) toggleAssignedBtn.classList.add('hidden');
+
+            hasUnsavedChanges = true;
+
+
+
+            document.getElementById('summaryTitle').textContent = `Vulnerability Summary: ${owner}`;
+           // const vulnerabilities = [...new Set(csvData.filter(row => row['Asset Owner'] === owner).map(row => row['Vulnerability Title']).filter(Boolean))];
+            let vulnerabilities;
+            let filteredRows;
+            if (owner === 'Patch') {
+               filteredRows = csvData.filter(row =>
+                    row['Vulnerability Title']?.startsWith('Oracle Linux: CVE') ||
+                    row['Vulnerability Title']?.startsWith('Red Hat: CVE')
+               );
+            } else {
+                filteredRows = csvData.filter(row => row['Asset Owner'] === owner);
+            }
+
+            vulnerabilities = [...new Set(filteredRows.map(row => row['Vulnerability Title']).filter(Boolean))];
+            const table = document.getElementById('vulnerabilityTable');
+            table.innerHTML = `
+                <tr>
+                    <th>S.NO</th>
+                    <th>Vulnerability</th>
+                    <th id="sortRiskScore" style="cursor: pointer;">Risk Score ${sortDescending ? '⬇️' : '⬆️'}</th>
+                    <th id="sortSeverity" style="cursor: pointer;">Severity  ${severitySortDescending ? '⬇️' : '⬆️'}</th>
+
+
+                    <th>Count</th>
+                    <th>Assign</th>
+                    <th>Remarks</th>
+                </tr>`;
+
+
+            let totalRiskScore = 0;
+            const vulnerabilityData = {};
+            vulnerabilities.forEach(title => {
+                // const rows = csvData.filter(row => row['Asset Owner'] === owner && row['Vulnerability Title'] === title);
+                const rows = filteredRows.filter(row => row['Vulnerability Title'] === title);
+                let totalRisk = 0;
+                rows.forEach(row => {
+                    let riskScore = parseFloat(row['Vulnerability Risk Score']) || 0;
+                    totalRisk += riskScore;
+                });
+                totalRiskScore += totalRisk;
+                vulnerabilityData[title] = { riskScore: totalRisk, count: rows.length };
+                const severityLevels = rows.map(row => row['Vulnerability Severity Level']);
+                const mostCommonSeverity = severityLevels.sort((a,b) =>
+                      severityLevels.filter(v => v===a).length - severityLevels.filter(v => v===b).length
+                ).pop();
+
+                vulnerabilityData[title] = {
+                   riskScore: totalRisk,
+                   count: rows.length,
+                   severity: mostCommonSeverity || 'N/A'
+                };
+
+            });
+
+
+            const sortedData = Object.entries(vulnerabilityData).sort((a, b) => {
+                if (sortBy === 'risk') {
+                   return sortDescending ? b[1].riskScore - a[1].riskScore : a[1].riskScore - b[1].riskScore;
+                } else if (sortBy === 'severity') {
+                     const valA = parseFloat(a[1].severity) || 0;
+                     const valB = parseFloat(b[1].severity) || 0;
+                     return severitySortDescending ? valB - valA : valA - valB;
+                }
+            });
+
+            const toggleButton = document.getElementById('toggleMore');
+
+
+
+            sortedData.forEach(([title, data], index) => {
+               const tr = document.createElement('tr');
+               tr.className = index >= 5 ? 'hidden extra-rows' : '';
+               tr.draggable = true;
+               tr.ondragstart = (e) => e.dataTransfer.setData('text/plain', title);
+               tr.classList.add('draggable');
+               tr.className = index >= 5 ? 'hidden extra-rows' : '';
+               tr.innerHTML = `<td>${index + 1}</td>
+                                <td class="filter-item" onclick="renderResults(\`${owner}\`, \`${title.replace(/`/g, "\\`")}\`)">${title}</td>
+                                <td>${data.riskScore.toFixed(2)}</td>
+                                <td>${data.severity}</td>
+                                <td>${data.count}</td>
+                                <td>
+                                   <select onchange="assignEmail('${title}', this.value)">
+                                     <option value="">-- Select user --</option>
+                                     ${Object.entries(USER_EMAILS).map(([user,email]) => `
+                                       <option value="${user}" ${assignments[title]?.user === user ? 'selected' : ''}>${user}</option>
+                                     `).join('')}
+                                   </select>
+                                </td>
+                                <td>
+                                  <textarea rows="1" placeholder="Add remark..." oninput="saveRemark('${title}', this.value)">${assignments[title]?.remark || ''}</textarea>
+                                </td>
+               `;
+               table.appendChild(tr);
+            });
+            const totalRow = document.createElement('tr');
+            totalRow.innerHTML = `<td><strong>Total Risk Score</strong></td>
+                                  <td></td>  <!-- Empty cell -->
+                                  <td><strong>${totalRiskScore.toFixed(2)}</strong></td>
+                                  <td colspan="4"></td>`;
+            table.appendChild(totalRow);
+
+            toggleButton.classList.toggle('hidden', sortedData.length <= 5);
+            toggleButton.textContent = 'Show More';
+            toggleButton.onclick = function () {
+                document.querySelectorAll('.extra-rows').forEach(row => row.classList.toggle('hidden'));
+                toggleButton.textContent = toggleButton.textContent === 'Show More' ? 'Show Less' : 'Show More';
+            };
+
+            // Enable sorting when header clicked
+            document.getElementById('sortRiskScore').onclick = () => {
+               sortDescending = !sortDescending;
+               sortBy = 'risk';
+               renderVulnerabilityTable(owner);
+            };
+            document.getElementById('sortSeverity').onclick = () => {
+                severitySortDescending = !severitySortDescending;
+                sortBy = 'severity';
+                renderVulnerabilityTable(owner);
+            };
+
+
+
+
+
+         }
+
+
+
+
+
+
+
+        function renderAssignList() {
+
+
+           const assignContainer = document.getElementById('usersDroppable');
+           assignContainer.innerHTML = '';
+
+
+
+
+           // Optional: show already assigned users with mail icons
+          const assignList = document.getElementById('assignList');
+          // 🧹 Clear previous user assignment list to prevent duplicates
+          const oldUserEntries = assignList.querySelectorAll('.filter-item');
+          oldUserEntries.forEach(el => el.remove());
+          // const uniqueAssignments = [...new Set(Object.values(assignments).filter(Boolean))];
+          const users = Object.values(assignments)
+              .map(entry => entry?.user)
+              .filter(Boolean);
+
+          const uniqueAssignments = [...new Set(users)] ;
+          uniqueAssignments.forEach(username => {
+             const email = USER_EMAILS[username];
+             const div = document.createElement('div');
+             div.className = 'filter-item';
+
+             const nameSpan = document.createElement('span');
+             nameSpan.textContent = username;
+             nameSpan.onclick = () => displayAssignedVulnerabilities(username);
+
+             const mailIcon = document.createElement('span');
+             mailIcon.textContent = ' ✉️';
+             mailIcon.style.cursor = 'pointer';
+             mailIcon.style.marginLeft = '10px';
+             mailIcon.onclick = (event) => {
+               event.stopPropagation();
+               sendMail(username);
+             };
+
+             div.appendChild(nameSpan);
+             div.appendChild(mailIcon);
+             assignList.appendChild(div);
+          });
+        }
+        // Display vulnerabilities for selected assign
+        function displayAssignedVulnerabilities(email) {
+           // Hide asset owner Show More button
+           const toggleOwnerBtn = document.getElementById('toggleMore');
+           if (toggleOwnerBtn) toggleOwnerBtn.classList.add('hidden');
+
+           let assignedVulnerabilities = Object.keys(assignments)
+             .filter(vuln => assignments[vuln]?.user === email);
+
+           clearAssetOwnerView();
+           const resultsTable = document.getElementById('results');
+           resultsTable.innerHTML = `
+                     <tr>
+                        <th>S.NO</th>
+                        <th>Vulnerability</th>
+                        <th>Risk Score</th>
+                        <th>Severity</th>
+                        <th>Count</th>
+                     </tr>`;
+           // resultsTable.innerHTML = '<tr><th>Vulnerability</th></tr>';
+
+           assignedVulnerabilities.forEach((vuln, index) => {
+              const rows = csvData.filter(row => row['Vulnerability Title'] === vuln);
+              const severityLevels = rows.map(row => row['Vulnerability Severity Level']);
+              const mostCommonSeverity = severityLevels.sort((a, b) =>
+                    severityLevels.filter(v => v === a).length - severityLevels.filter(v => v === b).length
+              ).pop() || 'N/A';
+              const riskScore = rows.reduce((sum, row) => {
+                 return sum + (parseFloat(row['Vulnerability Risk Score']) || 0);
+              }, 0);
+              const count = rows.length;
+              const row = resultsTable.insertRow();
+              row.className = index >= 3 ? 'hidden extra-rows' : ''; // Hide rows beyond the first 3
+              const snoCell = row.insertCell(0);
+              snoCell.textContent = index + 1;
+              const cell = row.insertCell(1);
+              const riskCell = row.insertCell(2);
+              // const vulnCell = row.insertCell(0);
+              const severityCell = row.insertCell(3);
+              const countCell = row.insertCell(4);
+
+
+              //cell.textContent = vuln;
+              //cell.innerHTML = `<span class="filter-item" style="cursor:pointer; color:blue; text-decoration:underline;" onclick="handleAssignedClick('${vuln}')">${vuln}</span>`;
+              //cell.innerHTML = `<a href="#" class="filter-item" onclick="filterByUserAndVuln('${email}', \`${vuln}\`)">${vuln}</a>`;
+
+              const span = document.createElement('span');
+              span.className = 'filter-item';
+              span.style.cursor = 'pointer';
+              span.style.color = 'blue';
+              span.style.textDecoration = 'underline';
+              span.textContent = vuln;
+              span.onclick = () => {
+                   const filtered = csvData.filter(row => row['Vulnerability Title'] === vuln);
+                   renderFilteredResultsInline(filtered); // 👈👇 custom function
+              };
+              cell.onclick = () => {
+                   const filtered = csvData.filter(row => row['Vulnerability Title'] === vuln);
+                   renderFilteredResultsInline(filtered, vuln);
+              };
+              cell.appendChild(span);
+              riskCell.textContent = riskScore.toFixed(1);
+              severityCell.textContent = mostCommonSeverity;
+              countCell.textContent = count;
+           });
+           const titleElement = document.getElementById('selectedVulnerability');
+           titleElement.textContent = `Assigned Vulnerabilities for ${email}`;
+
+           // Add Show More / Show Less button
+           let toggleButton = document.getElementById('toggleMoreAssigned');
+           if (!toggleButton) {
+                toggleButton = document.createElement('button');
+                toggleButton.id = 'toggleMoreAssigned';
+                toggleButton.textContent = 'Show More';
+                toggleButton.onclick = function () {
+                   document.querySelectorAll('.extra-rows').forEach(row => row.classList.toggle('hidden'));
+                   toggleButton.textContent = toggleButton.textContent === 'Show More' ? 'Show Less' : 'Show More';
+                };
+                resultsTable.parentNode.appendChild(toggleButton);
+           }
+           toggleButton.classList.toggle('hidden', assignedVulnerabilities.length <= 3);
+           toggleButton.textContent = 'Show More';
+
+           setTimeout(() => {
+               titleElement.scrollIntoView({ behavior: 'smooth', block: 'center' });
+           }, 200);
+
+        }
+
+        function renderAssignedVulnerabilities(email) {
+            document.getElementById('summaryTitle').textContent = `Assigned Vulnerabilities: ${email}`;
+            const table = document.getElementById('vulnerabilityTable');
+            table.innerHTML = `
+                <tr>
+                    <th>Vulnerability</th>
+                    <th>Risk Score</th>
+                    <th>Count</th>
+                </tr>`;
+
+            const assignedVulnerabilities = Object.keys(assignments).filter(vuln => assignments[vuln]?.user === email);
+            assignedVulnerabilities.forEach(title => {
+                const rows = csvData.filter(row => row['Vulnerability Title'] === title);
+                let totalRisk = rows.reduce((sum, row) => sum + (parseFloat(row['Vulnerability Risk Score']) || 0), 0);
+
+                const tr = document.createElement('tr');
+                tr.innerHTML = `<td>${title}</td>
+                                <td>${totalRisk.toFixed(2)}</td>
+                                <td>${rows.length}</td>`;
+                table.appendChild(tr);
+            });
+        }
+
+
+
+        // Send email for specific assign
+        function sendMail(username) {
+            const email = USER_EMAILS[username];
+            console.log("Sending to:", username, "->", email);
+            let assignedVulnerabilities = Object.keys(assignments)
+               .filter(vuln => assignments[vuln]?.user === username);
+            console.log("Assigned vulns:", assignedVulnerabilities);
+            if (assignedVulnerabilities.length === 0) {
+               alert(`No vulnerabilities assigned to ${email}`);
+               return;
+            }
+
+            let emailBody = `Hello ${username},\n\nYou have been assigned the following vulnerabilities:\n\n`;
+            assignedVulnerabilities.forEach(vuln => {
+               emailBody += `- ${vuln}\n`;
+            });
+            emailBody += "\nPlease review and take necessary action.\n\nBest Regards,\nSecurity Team";
+            const now = new Date();
+            const timestamp = now.toLocaleString('en-GB', {
+                day: '2-digit', month: '2-digit', year: 'numeric',
+                hour: '2-digit', minute: '2-digit', second: '2-digit'
+            });
+            const subject = `Vulnerability Assignment - ${timestamp}`;
+            const mailToLink = `mailto:${email}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(emailBody)}`;
+
+            window.open(mailToLink, '_blank');
+        }
+
+
+
+
+        async function assignEmail(title, username) {
+            if (username) {
+                assignments[title] = {
+                   user: username,
+                   remark: assignments[title]?.remark || ''
+                };
+
+                //assignments[title] = username;
+                const email = USER_EMAILS[username];
+                if (email) {
+                   sendMailToUser(email, title);
+                }
+            } else {
+                delete assignments[title];
+            }
+            await fetch('http://localhost:3000/assignments', {
+               method: 'POST',
+               headers: { 'Content-Type': 'application/json' },
+               body: JSON.stringify(assignments)
+            });
+
+
+            renderAssignList();
+            updateAssignmentsInData();
+            // renderAssignedVulnerabilities();
+            hasUnsavedChanges = true;
+        }
+
+        function saveRemark(title, text) {
+             if (!assignments[title]) {
+                assignments[title] = { user: '', remark: text };
+             } else {
+                assignments[title].remark = text;
+             }
+             hasUnsavedChanges = true;
+        }
+
+        function renderResults(owner, title) {
+               // const filteredData = csvData.filter(row => row['Asset Owner'] === owner && row['Vulnerability Title'] === title);
+               let filteredData;
+
+               if (owner === 'Patch') {
+                  filteredData = csvData.filter(row =>
+                     (row['Vulnerability Title']?.startsWith('Oracle Linux: CVE') ||
+                      row['Vulnerability Title']?.startsWith('Red Hat: CVE')) &&
+                     row['Vulnerability Title'] === title
+                  );
+               } else {
+                 filteredData = csvData.filter(row =>
+                     row['Asset Owner'] === owner &&
+                     row['Vulnerability Title'] === title
+                 );
+               }
+
+               document.getElementById('selectedVulnerability').textContent = `Vulnerability: ${title}`;
+               const table = document.getElementById('results');
+               table.innerHTML = `
+                <tr>
+                    <th>Hostname</th>
+                    <th>IP Address</th>
+                    <th>OS Name</th>
+                    <th>OS Version</th>
+                    <th>Severity Level</th>
+                    <th>Vulnerability Age</th>
+                    <th>Vulnerability Proof</th>
+                    <th>Service Port</th>
+                    <th>Custom Tag</th>
+                </tr>`;
+
+        filteredData.forEach((row, index) => {
+               const tr = document.createElement('tr');
+
+               // Truncate proof if too long
+               const proof = row['Vulnerability Proof'] || 'N/A';
+               const MAX_LENGTH = 10;
+
+               let proofHTML = '';
+               if (proof.length > MAX_LENGTH) {
+                   const shortProof = proof.slice(0, MAX_LENGTH);
+                   proofHTML = `
+                      <span class="short-proof" id="short-${index}">${shortProof}...</span>
+                      <span class="full-proof hidden" id="full-${index}">${proof}</span>
+                      <a href="javascript:void(0)" onclick="toggleProof(${index})" id="toggle-link-${index}">Show More</a>
+                   `;
+               } else {
+               proofHTML = proof;
+               }
+
+               tr.innerHTML = `
+                    <td>${row['Asset Names'] || 'N/A'}</td>
+                    <td>${row['Asset IP Address'] || 'N/A'}</td>
+                    <td>${row['Asset OS Name'] || 'N/A'}</td>
+                    <td>${row['Asset OS Version'] || 'N/A'}</td>
+                    <td>${row['Vulnerability Severity Level'] || 'N/A'}</td>
+
+                    <td>${row['Vulnerability Age'] || 'N/A'}</td>
+                    <td>${proofHTML}</td>
+                    <td>${row['Service Port'] || 'N/A'}</td>
+                    <td>${row['Custom Tag'] || 'N/A'}</td>`;
+               table.appendChild(tr);
+        });
+        setTimeout(() => {
+                const selectedVulnerabilityElement = document.getElementById('selectedVulnerability');
+                selectedVulnerabilityElement.scrollIntoView({ behavior: 'smooth', block: 'center' });
+            }, 200);
+
+
+
+        }
+
+        function toggleProof(index) {
+           const shortEl = document.getElementById(`short-${index}`);
+           const fullEl = document.getElementById(`full-${index}`);
+           const toggleLink = document.getElementById(`toggle-link-${index}`);
+
+           if (shortEl.classList.contains('hidden')) {
+              shortEl.classList.remove('hidden');
+              fullEl.classList.add('hidden');
+              toggleLink.textContent = 'Show More';
+           } else {
+              shortEl.classList.add('hidden');
+              fullEl.classList.remove('hidden');
+              toggleLink.textContent = 'Show Less';
+           }
+        }
+
+        function handleAssignedClick(vulnTitle) {
+            const row = csvData.find(row => row['Vulnerability Title'] === vulnTitle);
+            if (!row) {
+               alert("No data found for selected vulnerability.");
+               return;
+            }
+            const owner = row['Asset Owner'];
+            renderResults(owner, vulnTitle);
+        }
+
+        window.addEventListener('beforeunload', function (e) {
+           if (hasUnsavedChanges) {
+              e.preventDefault();
+              e.returnValue = 'You have unsaved assignments. Do you really want to leave?';
+           }
+        });
+        hasUnsavedChanges = false;
+
+       function renderAssignedVulnerabilities() {
+              const assignedSection = document.getElementById('assigned-vulnerabilities');
+              assignedSection.innerHTML = ''; // Clear before re-rendering
+
+              Object.keys(assignments).forEach((userEmail) => {
+                    const userSection = document.createElement('div');
+                    userSection.classList.add('assigned-user');
+
+                    const header = document.createElement('h3');
+                    header.textContent = `Assigned to: ${userEmail}`;
+                    userSection.appendChild(header);
+
+                    const vulnerabilities = assignments[userEmail];
+                    const table = document.createElement('table');
+                    table.classList.add('assigned-vuln-table');
+
+                    const thead = document.createElement('thead');
+                    thead.innerHTML = `
+                       <tr>
+                         <th>Vulnerability</th>
+                         <th>Risk Score</th>
+                         <th>Count</th>
+                         <th>Proof</th>
+                        </tr>
+                    `;
+                    table.appendChild(thead);
+
+                    const tbody = document.createElement('tbody');
+                    vulnerabilities.forEach((vuln, index) => {
+                        const row = document.createElement('tr');
+                        row.innerHTML = `
+                              <td class="clickable-vuln" data-user="${userEmail}" data-vuln="${vuln.name}">${vuln.name}</td>
+                              <td>${vuln.riskScore}</td>
+                              <td>${vuln.count}</td>
+                              <td>
+                                 <span id="short-assigned-${index}">${truncateProof(vuln.proof)}</span>
+                                 <span id="full-assigned-${index}" class="hidden">${vuln.proof}</span>
+                                 <a href="javascript:void(0)" onclick="toggleProofAssigned(${index})" id="toggle-link-assigned-${index}">Show More</a>
+                              </td>
+                        `;
+                        tbody.appendChild(row);
+                    });
+
+                    table.appendChild(tbody);
+                    userSection.appendChild(table);
+                    assignedSection.appendChild(userSection);
+              });
+
+              // Bind event listener for vulnerability clicks
+              document.querySelectorAll('.clickable-vuln').forEach(el => {
+                 el.addEventListener('click', function () {
+                     const selectedUser = this.getAttribute('data-user');
+                     const selectedVuln = this.getAttribute('data-vuln');
+                     filterByUserAndVuln(selectedUser, selectedVuln);
+                 });
+              });
+       }
+
+       // Utility to truncate proof text
+       function truncateProof(proof, length = 30) {
+           return proof.length > length ? proof.slice(0, length) + '...' : proof;
+       }
+
+       // Toggle proof visibility
+       function toggleProofAssigned(index) {
+            const short = document.getElementById(`short-assigned-${index}`);
+            const full = document.getElementById(`full-assigned-${index}`);
+            const link = document.getElementById(`toggle-link-assigned-${index}`);
+
+            const isHidden = full.classList.contains('hidden');
+            short.style.display = isHidden ? 'none' : '';
+            full.style.display = isHidden ? '' : 'none';
+            full.classList.toggle('hidden');
+            link.textContent = isHidden ? 'Show Less' : 'Show More';
+       }
+
+       //  Filter rows matching selected user and vulnerability
+       function filterByUserAndVuln(userEmail, vulnName) {
+           const results = csvData.filter(row =>
+               row['Assigned To'] === userEmail && row['Vulnerability Title']?.trim() === vulnName.trim()
+           );
+
+           renderFilteredResults(results);
+       }
+
+       // 🖼️ Render the filtered detailed table
+
+
+       function renderFilteredResultsInline(results, title) {
+
+           const detailSection = document.getElementById('filtered-results');
+
+
+           detailSection.innerHTML = ''; // Clear previous
+
+           if (title) {
+              const heading = document.createElement('h3');
+              heading.id = 'vulnTitleScrollTarget';
+
+              heading.textContent = `Vulnerability: ${title}`;
+
+              heading.style.textAlign = 'center';
+              heading.style.marginBottom = '1em';
+              heading.style.fontSize = '16px'
+              detailSection.appendChild(heading);
+           }
+
+           if (results.length === 0) {
+              detailSection.textContent = 'No matching results found.';
+              return;
+           }
+
+           const table = document.createElement('table');
+           table.style.fontSize = '15px';
+           table.style.borderCollapse = 'collapse';
+           table.style.width = '80%';
+           table.style.marginLeft = '10em';
+           table.classList.add('filtered-detail-table');
+           const wrapper = document.createElement('div');
+           wrapper.style.display = 'flex';
+           wrapper.style.justifyContent = 'center'; // 🎯 Center the table horizontally
+
+           wrapper.style.marginTop = '1em';         // Optional spacing from the top
+           wrapper.appendChild(table);
+           detailSection.appendChild(wrapper);
+
+
+
+           const thead = document.createElement('thead');
+           thead.innerHTML = `
+                   <tr>
+                      <th>Hostname</th>
+                      <th>IP Address</th>
+                      <th>OS Name</th>
+                      <th>OS Version</th>
+                      <th>Severity Level</th>
+                      <th>Vulnerability Age</th>
+                      <th>Vulnerability Proof</th>
+                      <th>Service Port</th>
+                      <th>Custom Tag</th>
+                   </tr>
+           `;
+           table.appendChild(thead);
+
+           const tbody = document.createElement('tbody');
+           results.forEach((row, index) => {
+               const tr = document.createElement('tr');
+               // Truncate proof if too long
+               const proof = row['Vulnerability Proof'] || 'N/A';
+               const MAX_LENGTH = 10;
+               let proofHTML = '';
+               if (proof.length > MAX_LENGTH) {
+                   const shortProof = proof.slice(0, MAX_LENGTH);
+                   proofHTML = `
+                      <span class="short-proof" id="short-${index}">${shortProof}...</span>
+                      <span class="full-proof hidden" id="full-${index}">${proof}</span>
+                      <a href="javascript:void(0)" onclick="toggleProof(${index})" id="toggle-link-${index}">Show More</a>
+                   `;
+               } else {
+                 proofHTML = proof;
+               }
+               tr.innerHTML = `
+                    <td>${row['Asset Names'] || 'N/A'}</td>
+                    <td>${row['Asset IP Address'] || 'N/A'}</td>
+                    <td>${row['Asset OS Name'] || 'N/A'}</td>
+                    <td>${row['Asset OS Version'] || 'N/A'}</td>
+                    <td>${row['Vulnerability Severity Level'] || 'N/A'}</td>
+                    <td>${row['Vulnerability Age'] || 'N/A'}</td>
+                    <td>${proofHTML}</td>
+                    <td>${row['Service Port'] || 'N/A'}</td>
+                    <td>${row['Custom Tag'] || 'N/A'}</td>
+               `;
+               tbody.appendChild(tr);
+           });
+
+           table.appendChild(tbody);
+           detailSection.appendChild(table);
+
+           setTimeout(() => {
+               const titleEl = document.getElementById('vulnTitleScrollTarget');
+               if (titleEl) {
+                   const rect = titleEl.getBoundingClientRect();
+                   const scrollTop = window.pageYOffset || document.documentElement.scrollTop;
+                   const offset = rect.top + scrollTop - (window.innerHeight / 2) + (rect.height / 2);
+                   window.scrollTo({ top: offset, behavior: 'smooth' });
+               }
+           }, 300);
+
+       document.querySelectorAll('.vuln-item').forEach(item => {
+          item.addEventListener('click', () => {
+            const title = item.textContent;
+            const filteredResults = fullData.filter(row => row['Vulnerability Name'] === title);
+
+            renderFilteredResultsInline(filteredResults, title);
+          });
+       });
+       setTimeout(() => {
+             const detailSection = document.getElementById('filtered-results');
+             if (detailSection) {
+                 detailSection.scrollIntoView({ behavior: 'smooth', block: 'center' });
+             }
+       }, 200);
+
+
+
+       }
+       function toggleProof(index) {
+          const shortEl = document.getElementById(`short-${index}`);
+          const fullEl = document.getElementById(`full-${index}`);
+          const toggleLink = document.getElementById(`toggle-link-${index}`);
+
+          if (shortEl.classList.contains('hidden')) {
+             shortEl.classList.remove('hidden');
+             fullEl.classList.add('hidden');
+             toggleLink.textContent = 'Show More';
+          } else {
+             shortEl.classList.add('hidden');
+             fullEl.classList.remove('hidden');
+             toggleLink.textContent = 'Show Less';
+          }
+       }
+
+       function updateAssignmentsInData() {
+           Object.entries(assignments).forEach(([vulnTitle, user]) => {
+               vulns.forEach(vuln => {
+                    csvData.forEach(row => {
+                            if (row['Vulnerability Title'] === vulnTitle) {
+                                row['Assigned To'] = user;
+                            }
+                    });
+               });
+           });
+       }
+
+       function clearAssignListViews() {
+          document.getElementById('results').innerHTML = '';
+          document.getElementById('filtered-results').innerHTML = '';
+          document.getElementById('selectedVulnerability').textContent = '';
+          const toggleButton = document.getElementById('toggleMoreAssigned');
+          if (toggleButton) toggleButton.remove();
+       }
+
+       function clearAssetOwnerView() {
+          document.getElementById('vulnerabilityTable').innerHTML = '';
+          document.getElementById('summaryTitle').textContent = 'Vulnerability Summary';
+       }
+
+
+
+
+
+    </script>
+</body>
+</html>
