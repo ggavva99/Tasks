@@ -1,0 +1,102 @@
+Timeline of Teramind TMU Upgrade and Issue Resolution – Azure Environment
+May 27, 2025
+5:00 PM – RFC initiated
+
+Change window started for upgrading the Teramind Management Utility (TMU) on the Azure-hosted Teramind server ().
+
+5:05 PM – Azure Snapshot Taken
+
+A snapshot of the VM was taken in Azure as a rollback point prior to the upgrade.
+
+5:10 PM – Teramind Services Stopped
+
+All relevant Teramind services were gracefully stopped in preparation for the upgrade.
+
+5:15 PM – TMU Upgrade Initiated
+
+The TMU upgrade process was started.
+
+5:30 PM – TMU Upgrade Completed
+
+Upgrade completed successfully without any immediate errors.
+
+5:40 PM – Teramind Services Restarted
+
+Services were brought back online.
+
+5:45 PM – Validation Started
+
+Post-upgrade validation steps began.
+
+5:50 PM – Issue Observed
+
+The website https:// was still not accessible. Services appeared to be down.
+
+6:00 PM – Attempted Service Restart
+
+A restart of services was attempted again, but the issue persisted.
+
+6:00–6:45 PM – Initial Troubleshooting
+
+Logs were reviewed for anomalies; no immediate root cause identified.
+
+6:45 PM – Rollback Attempt
+
+The server was shut down, and a rollback to the earlier Azure snapshot was initiated.
+
+7:10 PM – Rollback Failed
+
+Snapshot revert was unsuccessful. An email was sent to the Teramind vendor requesting assistance.
+
+7:25 PM – Escalation
+
+Contacted Adam and the Unix on-call engineer (Nick).
+
+Troubleshooting the failed rollback, but unable to determine root cause.
+
+8:30 PM – Vendor Call Discussion
+
+Decided to arrange a Zoom session with the vendor for deeper investigation.
+
+May 28, 2025
+10:00 AM – Vendor Meeting
+
+Held a session with the Teramind vendor.
+
+Vendor unable to start services. Suspected TMU version incompatibility with the Docker environment.
+
+11:15 AM – Vendor Recommendation
+
+Vendor reported seeing similar issues with other customers.
+
+Provided two options:
+
+Contact Microsoft support for snapshot assistance.
+
+Migrate the Teramind application to a pre-built RHEL 9 VM.
+
+11:30 AM – Microsoft Case Opened
+
+A support case was opened with Microsoft.
+
+12:30 PM – Microsoft Support Session
+
+Adam engaged with Microsoft support.
+
+Identified that snapshot revert failed due to an additional disk being added without updating snapshot configuration.
+
+Issue was resolved after identifying this discrepancy.
+
+1:00–1:30 PM – Teramind Vendor Discussion
+
+Explored recovery or reinstallation options with the vendor to restore Teramind functionality.
+
+2:30 PM – Decision to Migrate
+
+Decided to proceed with migration to the RHEL 9 VM already provisioned for future use.
+
+5:00 PM – Migration Completed
+
+Teramind application was successfully migrated to the new RHEL 9 VM.
+
+BI sync was still in progress; agreed to reconvene on May 29 to complete validation.
